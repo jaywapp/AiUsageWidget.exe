@@ -1,9 +1,11 @@
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using Brush = System.Windows.Media.Brush;
@@ -13,11 +15,13 @@ namespace AiUsageWidget;
 public partial class MainWindow : Window
 {
     private const int Port = 4789;
-    private const double BarWidth = 204; // 232 - 26(padding) - 2(border)
+    private const double BarWidth = 206; // Viewbox 내부 디자인 폭 (StackPanel Width와 일치)
 
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(3) };
 
     private readonly DispatcherTimer _timer;
+    private readonly DispatcherTimer _saveDebounce;
+    private readonly Settings _settings;
     private System.Windows.Forms.NotifyIcon? _tray;
     private bool _exiting;
 
@@ -31,17 +35,48 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        _settings = Settings.Load();
+        Width = _settings.Width;
+        Height = _settings.Height;
+
         var wa = SystemParameters.WorkArea;
-        Left = wa.Right - Width - 12;
-        Top = wa.Top + 12;
+        if (double.IsNaN(_settings.Left) || double.IsNaN(_settings.Top) ||
+            _settings.Left < SystemParameters.VirtualScreenLeft - 50 ||
+            _settings.Left > SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 50 ||
+            _settings.Top < SystemParameters.VirtualScreenTop - 50 ||
+            _settings.Top > SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 50)
+        {
+            Left = wa.Right - Width - 12;
+            Top = wa.Top + 12;
+        }
+        else
+        {
+            Left = _settings.Left;
+            Top = _settings.Top;
+        }
 
         MouseLeftButtonDown += (_, _) => { try { DragMove(); } catch { /* 클릭 타이밍에 따라 발생 가능 */ } };
+        MouseRightButtonUp += (_, _) => OpenSettings();
 
         SetupTray();
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(15) };
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_settings.RefreshSeconds) };
         _timer.Tick += async (_, _) => await UpdateAsync();
         _timer.Start();
+
+        // 크기/위치 변경 1초 후 저장 (디바운스)
+        _saveDebounce = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _saveDebounce.Tick += (_, _) =>
+        {
+            _saveDebounce.Stop();
+            _settings.Width = Width;
+            _settings.Height = Height;
+            _settings.Left = Left;
+            _settings.Top = Top;
+            _settings.Save();
+        };
+        SizeChanged += (_, _) => { _saveDebounce.Stop(); _saveDebounce.Start(); };
+        LocationChanged += (_, _) => { _saveDebounce.Stop(); _saveDebounce.Start(); };
 
         Loaded += async (_, _) =>
         {
@@ -81,6 +116,7 @@ public partial class MainWindow : Window
 
         var menu = new System.Windows.Forms.ContextMenuStrip();
         menu.Items.Add("위젯 표시/숨기기", null, (_, _) => ToggleVisibility());
+        menu.Items.Add("설정", null, (_, _) => OpenSettings());
         menu.Items.Add("대시보드 열기", null, (_, _) =>
             Process.Start(new ProcessStartInfo($"http://localhost:{Port}") { UseShellExecute = true }));
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
@@ -95,12 +131,47 @@ public partial class MainWindow : Window
         else { Show(); Topmost = true; }
     }
 
+    private void OpenSettings()
+    {
+        if (!IsVisible) Show();
+        var dlg = new SettingsWindow(_settings) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            Width = _settings.Width;
+            Height = _settings.Height;
+            _timer.Interval = TimeSpan.FromSeconds(_settings.RefreshSeconds);
+            _settings.Save();
+        }
+    }
+
     private void ExitApp()
     {
         _exiting = true;
         _timer.Stop();
+        _settings.Width = Width;
+        _settings.Height = Height;
+        _settings.Left = Left;
+        _settings.Top = Top;
+        _settings.Save();
         if (_tray != null) { _tray.Visible = false; _tray.Dispose(); }
         System.Windows.Application.Current.Shutdown();
+    }
+
+    // ---------- 리사이즈 그립 (테두리 없는 창용 Win32 트릭) ----------
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private void ResizeGrip_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        const int WM_NCLBUTTONDOWN = 0x00A1;
+        const int HTBOTTOMRIGHT = 17;
+        ReleaseCapture();
+        SendMessage(new WindowInteropHelper(this).Handle, WM_NCLBUTTONDOWN, (IntPtr)HTBOTTOMRIGHT, IntPtr.Zero);
+        e.Handled = true;
     }
 
     // ---------- 서버 ----------
