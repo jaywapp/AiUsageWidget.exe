@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run server tests
+        run: node --test test/store.test.js
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Publish widget (self-contained single exe)
+        run: >
+          dotnet publish widget/AiUsageWidget/AiUsageWidget.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish/widget
+
+      - name: Package release zip
+        shell: pwsh
+        run: |
+          $stage = "dist/AiUsageWidget"
+          New-Item -ItemType Directory -Force $stage | Out-Null
+          Copy-Item publish/widget/AiUsageWidget.exe $stage
+          Copy-Item server.js, config.json, package.json, start.cmd, README.md $stage
+          Copy-Item lib, public -Recurse -Destination $stage
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/AiUsageWidget-win-x64.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: AI Usage Widget v1.0.${{ github.run_number }}
+          files: dist/AiUsageWidget-win-x64.zip
+          body: |
+            ## AI 토큰 사용량 위젯 + 대시보드 (win-x64)
+
+            `AiUsageWidget-win-x64.zip` 압축 해제 후 `AiUsageWidget.exe` 실행.
+
+            - 위젯은 .NET 런타임 불필요 (self-contained 단일 exe)
+            - 위젯이 같은 폴더의 `server.js`(대시보드 서버)를 자동 기동 — **Node.js 18+ 필요**
+            - 전체 대시보드: http://localhost:4789
+            - 윈도우 시작 시 자동 실행: `shell:startup`에 exe 바로가기 추가
