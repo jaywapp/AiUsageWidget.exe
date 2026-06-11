@@ -42,18 +42,28 @@ jobs:
           Copy-Item lib, public -Recurse -Destination $stage
           Compress-Archive -Path "$stage/*" -DestinationPath "dist/AiUsageWidget-win-x64.zip"
 
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" /DMyAppVersion=1.0.${{ github.run_number }} installer\setup.iss
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
           name: AI Usage Widget v1.0.${{ github.run_number }}
-          files: dist/AiUsageWidget-win-x64.zip
+          files: |
+            dist/AiUsageWidget-Setup.exe
+            dist/AiUsageWidget-win-x64.zip
           body: |
             ## AI 토큰 사용량 위젯 + 대시보드 (win-x64)
 
+            ### 설치 (권장)
+            **`AiUsageWidget-Setup.exe`** 실행 — 관리자 권한 불필요, 설치 중 "Start automatically with Windows" 체크 시 부팅 자동 실행.
+
+            ### 포터블
             `AiUsageWidget-win-x64.zip` 압축 해제 후 `AiUsageWidget.exe` 실행.
 
             - 위젯은 .NET 런타임 불필요 (self-contained 단일 exe)
             - 위젯이 같은 폴더의 `server.js`(대시보드 서버)를 자동 기동 — **Node.js 18+ 필요**
             - 전체 대시보드: http://localhost:4789
-            - 윈도우 시작 시 자동 실행: `shell:startup`에 exe 바로가기 추가
