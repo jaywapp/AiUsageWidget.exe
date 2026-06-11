@@ -1,0 +1,9 @@
+{
+  "port": 4789,
+  "claudePlan": {
+    "name": null,
+    "limit5hTokens": null,
+    "limit7dTokens": null
+  },
+  "pricingOverrides": {}
+}

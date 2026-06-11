@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 토큰 사용량 대시보드</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>AI 토큰 사용량 대시보드</h1>
+      <span id="status" class="status">연결 중…</span>
+    </div>
+    <div class="controls">
+      <div class="seg" id="sourceFilter">
+        <button data-source="all" class="active">전체</button>
+        <button data-source="claude">Claude</button>
+        <button data-source="codex">Codex</button>
+      </div>
+      <span id="updatedAt" class="muted"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- KPI 카드 -->
+    <section class="cards" id="kpiCards">
+      <div class="card"><div class="card-label">오늘</div><div class="card-value" id="kpiToday">-</div><div class="card-sub" id="kpiTodayCost"></div></div>
+      <div class="card"><div class="card-label">이번 주</div><div class="card-value" id="kpiWeek">-</div><div class="card-sub" id="kpiWeekCost"></div></div>
+      <div class="card"><div class="card-label">이번 달</div><div class="card-value" id="kpiMonth">-</div><div class="card-sub" id="kpiMonthCost"></div></div>
+      <div class="card"><div class="card-label">누적 (전체 기간)</div><div class="card-value" id="kpiTotal">-</div><div class="card-sub" id="kpiTotalCost"></div></div>
+    </section>
+
+    <!-- 플랜 현황 -->
+    <section class="panel">
+      <h2>플랜 대비 사용 현황</h2>
+      <div class="plan-grid">
+        <div class="plan-box">
+          <div class="plan-head">
+            <span class="badge claude">Claude</span>
+            <span id="claudePlanName" class="plan-name"></span>
+          </div>
+          <div class="gauge-row">
+            <div class="gauge-label">최근 5시간 <span class="muted" id="claude5hDetail"></span></div>
+            <div class="gauge"><div class="gauge-fill claude" id="claude5hBar"></div></div>
+          </div>
+          <div class="gauge-row">
+            <div class="gauge-label">최근 7일 <span class="muted" id="claude7dDetail"></span></div>
+            <div class="gauge"><div class="gauge-fill claude" id="claude7dBar"></div></div>
+          </div>
+          <div class="muted small" id="claudeEstimateNote"></div>
+        </div>
+        <div class="plan-box">
+          <div class="plan-head">
+            <span class="badge codex">Codex</span>
+            <span id="codexPlanName" class="plan-name"></span>
+          </div>
+          <div class="gauge-row">
+            <div class="gauge-label">5시간 한도 <span class="muted" id="codexPrimaryDetail"></span></div>
+            <div class="gauge"><div class="gauge-fill codex" id="codexPrimaryBar"></div></div>
+          </div>
+          <div class="gauge-row">
+            <div class="gauge-label">주간 한도 <span class="muted" id="codexSecondaryDetail"></span></div>
+            <div class="gauge"><div class="gauge-fill codex" id="codexSecondaryBar"></div></div>
+          </div>
+          <div class="muted small" id="codexCaptureNote"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 차트 -->
+    <section class="panel">
+      <div class="panel-head">
+        <h2>기간별 사용량</h2>
+        <div class="seg" id="periodTabs">
+          <button data-period="daily" class="active">일별 (30일)</button>
+          <button data-period="weekly">주별 (12주)</button>
+          <button data-period="monthly">월별 (12개월)</button>
+        </div>
+        <div class="seg" id="metricTabs">
+          <button data-metric="tokens" class="active">토큰</button>
+          <button data-metric="cost">비용($)</button>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="periodChart"></canvas></div>
+    </section>
+
+    <div class="two-col">
+      <section class="panel">
+        <h2>모델별 비중 (비용 기준)</h2>
+        <div class="chart-wrap donut"><canvas id="modelChart"></canvas></div>
+      </section>
+      <section class="panel">
+        <h2>모델별 상세</h2>
+        <div class="table-wrap">
+          <table id="modelTable">
+            <thead>
+              <tr><th>모델</th><th>도구</th><th class="num">입력</th><th class="num">출력</th><th class="num">캐시 읽기</th><th class="num">캐시 쓰기</th><th class="num">합계</th><th class="num">환산 비용</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="muted small">※ 환산 비용은 API 종량제 기준 참고치입니다 (구독 플랜 실청구액 아님).</div>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

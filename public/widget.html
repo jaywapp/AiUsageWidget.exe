@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>AI 사용량 위젯</title>
+  <style>
+    :root {
+      --bg: #14161e;
+      --panel: #1d2029;
+      --text: #e8eaf0;
+      --muted: #8b91a3;
+      --claude: #d97757;
+      --codex: #4f9cf9;
+      --border: #2a2f3e;
+      --green: #46c481;
+      --yellow: #e4b54c;
+      --red: #e0564f;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", "Malgun Gothic", system-ui, sans-serif;
+      font-size: 12px;
+      padding: 10px 12px;
+      overflow: hidden;
+      user-select: none;
+    }
+    .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 7px; }
+    .head .t { font-weight: 700; font-size: 12.5px; }
+    .live { font-size: 10px; color: var(--muted); }
+    .live.on { color: var(--green); }
+    .live.on::before { content: "● "; }
+
+    .kpi { display: flex; justify-content: space-between; align-items: baseline; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; margin-bottom: 8px; }
+    .kpi .label { color: var(--muted); font-size: 10px; }
+    .kpi .val { font-size: 16px; font-weight: 700; }
+    .kpi .cost { font-size: 12px; color: var(--muted); font-weight: 600; }
+
+    .g { margin-bottom: 6px; }
+    .g .row { display: flex; justify-content: space-between; font-size: 10.5px; margin-bottom: 2px; }
+    .g .name { color: var(--muted); }
+    .g .name b { color: var(--text); font-weight: 600; }
+    .bar { height: 5px; border-radius: 3px; background: #0c0e14; overflow: hidden; }
+    .fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+    .fill.claude { background: var(--claude); }
+    .fill.codex { background: var(--codex); }
+    .fill.warn { background: var(--yellow); }
+    .fill.danger { background: var(--red); }
+
+    .foot { display: flex; justify-content: space-between; align-items: baseline; color: var(--muted); font-size: 10px; margin-top: 7px; border-top: 1px solid var(--border); padding-top: 6px; }
+    .foot a { color: var(--muted); text-decoration: none; }
+    .foot a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <span class="t">AI 사용량</span>
+    <span class="live" id="live">연결 중…</span>
+  </div>
+
+  <div class="kpi">
+    <div>
+      <span class="label">오늘 </span>
+      <span class="val" id="todayTokens">-</span>
+    </div>
+    <div class="cost" id="todayCost">-</div>
+  </div>
+
+  <div class="g">
+    <div class="row"><span class="name"><b>Claude</b> 5시간</span><span id="c5t">-</span></div>
+    <div class="bar"><div class="fill claude" id="c5b"></div></div>
+  </div>
+  <div class="g">
+    <div class="row"><span class="name"><b>Claude</b> 7일</span><span id="c7t">-</span></div>
+    <div class="bar"><div class="fill claude" id="c7b"></div></div>
+  </div>
+  <div class="g">
+    <div class="row"><span class="name"><b>Codex</b> 5시간</span><span id="x5t">-</span></div>
+    <div class="bar"><div class="fill codex" id="x5b"></div></div>
+  </div>
+  <div class="g">
+    <div class="row"><span class="name"><b>Codex</b> 주간</span><span id="x7t">-</span></div>
+    <div class="bar"><div class="fill codex" id="x7b"></div></div>
+  </div>
+
+  <div class="foot">
+    <span id="monthSum">-</span>
+    <a href="/" target="_blank">대시보드 ↗</a>
+  </div>
+
+  <script>
+    function fmtTokens(n) {
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return String(Math.round(n));
+    }
+    function fmtCost(n) { return '$' + n.toFixed(2); }
+    function cls(base, pct) {
+      if (pct >= 90) return 'fill danger';
+      if (pct >= 70) return 'fill warn';
+      return 'fill ' + base;
+    }
+    function setGauge(barId, txtId, base, pct, txt) {
+      const b = document.getElementById(barId);
+      b.style.width = Math.min(100, pct) + '%';
+      b.className = cls(base, pct);
+      document.getElementById(txtId).textContent = txt;
+    }
+
+    async function load() {
+      try {
+        const s = await (await fetch('/api/summary')).json();
+        const today = {
+          tokens: s.kpi.today.claude.tokens + s.kpi.today.codex.tokens,
+          cost: s.kpi.today.claude.cost + s.kpi.today.codex.cost,
+        };
+        document.getElementById('todayTokens').textContent = fmtTokens(today.tokens);
+        document.getElementById('todayCost').textContent = fmtCost(today.cost);
+
+        const c = s.plan.claude;
+        setGauge('c5b', 'c5t', 'claude', c.pct5h, c.pct5h.toFixed(0) + '%');
+        setGauge('c7b', 'c7t', 'claude', c.pct7d, c.pct7d.toFixed(0) + '%');
+
+        const x = s.plan.codex;
+        if (x && x.primary) setGauge('x5b', 'x5t', 'codex', x.primary.usedPercent, x.primary.usedPercent.toFixed(0) + '%');
+        if (x && x.secondary) setGauge('x7b', 'x7t', 'codex', x.secondary.usedPercent, x.secondary.usedPercent.toFixed(0) + '%');
+
+        const month = {
+          tokens: s.kpi.month.claude.tokens + s.kpi.month.codex.tokens,
+          cost: s.kpi.month.claude.cost + s.kpi.month.codex.cost,
+        };
+        document.getElementById('monthSum').textContent = '이번 달 ' + fmtTokens(month.tokens) + ' · ' + fmtCost(month.cost);
+      } catch (e) {
+        document.getElementById('live').textContent = '서버 연결 실패';
+      }
+    }
+
+    function sse() {
+      const es = new EventSource('/api/events');
+      const el = document.getElementById('live');
+      es.onopen = () => { el.textContent = '실시간'; el.classList.add('on'); };
+      es.onmessage = () => load();
+      es.onerror = () => { el.textContent = '재연결…'; el.classList.remove('on'); };
+    }
+
+    load();
+    sse();
+    setInterval(load, 60000);
+  </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# .NET
+widget/AiUsageWidget/bin/
+widget/AiUsageWidget/obj/
+
+# Node
+node_modules/
+
+# 로컬 런타임 산출물
+widget.log
+*.user
