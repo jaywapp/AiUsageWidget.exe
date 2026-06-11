@@ -56,9 +56,9 @@ public partial class MainWindow : Window
         }
 
         MouseLeftButtonDown += (_, _) => { try { DragMove(); } catch { /* 클릭 타이밍에 따라 발생 가능 */ } };
-        MouseRightButtonUp += (_, _) => OpenSettings();
 
         SetupTray();
+        SetupWidgetContextMenu();
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(_settings.RefreshSeconds) };
         _timer.Tick += async (_, _) => await UpdateAsync();
@@ -123,6 +123,28 @@ public partial class MainWindow : Window
         menu.Items.Add("종료", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => ToggleVisibility();
+    }
+
+    // 위젯 우클릭 메뉴 — 트레이 메뉴와 동일 구성
+    private void SetupWidgetContextMenu()
+    {
+        var menu = new System.Windows.Controls.ContextMenu();
+
+        System.Windows.Controls.MenuItem Item(string header, Action action)
+        {
+            var mi = new System.Windows.Controls.MenuItem { Header = header };
+            mi.Click += (_, _) => action();
+            return mi;
+        }
+
+        menu.Items.Add(Item("위젯 표시/숨기기", ToggleVisibility));
+        menu.Items.Add(Item("설정", OpenSettings));
+        menu.Items.Add(Item("대시보드 열기", () =>
+            Process.Start(new ProcessStartInfo($"http://localhost:{Port}") { UseShellExecute = true })));
+        menu.Items.Add(new System.Windows.Controls.Separator());
+        menu.Items.Add(Item("종료", ExitApp));
+
+        ContextMenu = menu;
     }
 
     private void ToggleVisibility()
